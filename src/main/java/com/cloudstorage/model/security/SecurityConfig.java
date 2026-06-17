@@ -2,43 +2,22 @@ package com.cloudstorage.model.security;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.AuthenticationProvider;
-import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
-import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
-import com.cloudstorage.model.service.CustomUserDetailsService;
+import com.cloudstorage.model.security.filter.JwtAuthenticationFilter;
 
+import lombok.RequiredArgsConstructor;
+
+@RequiredArgsConstructor
 @Configuration
 public class SecurityConfig {
-    @Bean
-    public AuthenticationProvider authenticationProvider(CustomUserDetailsService userDetailsService, 
-                                                         PasswordEncoder passwordEncoder) {
-        DaoAuthenticationProvider authProvider = new DaoAuthenticationProvider();
-        
-        // 1. Give it the Translator
-        authProvider.setUserDetailsService(userDetailsService);
-        
-        // 2. Give it the Math Checker
-        authProvider.setPasswordEncoder(passwordEncoder);
-        
-        return authProvider;
-    }
+    private final AuthenticationProvider authenticationProvider;
+    private final JwtAuthenticationFilter jwtAuthenticationFilter;
 
-    //We need to explicitly add it for login and such
-    @Bean //Interrogation Room
-    public AuthenticationManager authenticationManager(AuthenticationConfiguration authConfig) throws Exception {
-        return authConfig.getAuthenticationManager();
-    }
-
-    @Bean
-    public PasswordEncoder passwordEncoder(){
-        return new BCryptPasswordEncoder();
-    }
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -52,7 +31,11 @@ public class SecurityConfig {
                 .requestMatchers("/api/auth/**").permitAll() // VIP List: Open the lobby doors!
                 .requestMatchers("/api/auth/**", "/error").permitAll() //hahah it block even the delhivery error guy
                 .anyRequest().authenticated()                // Lock down everything else
-            );
+            )
+            //aint jwt is already stateless
+            .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            .authenticationProvider(authenticationProvider) //authentication provider
+            .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }

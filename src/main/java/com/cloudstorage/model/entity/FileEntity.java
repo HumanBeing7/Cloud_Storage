@@ -1,6 +1,5 @@
 package com.cloudstorage.model.entity;
 
-import java.math.BigInteger;
 import java.time.LocalDateTime;
 
 import org.hibernate.annotations.CreationTimestamp;
