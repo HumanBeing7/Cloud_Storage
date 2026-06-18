@@ -7,12 +7,12 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
-import com.cloudstorage.model.config.AppRole;
 import com.cloudstorage.model.dto.loginDTO.AuthResponseDTO;
 import com.cloudstorage.model.dto.loginDTO.LoginRequestDTO;
 import com.cloudstorage.model.dto.loginDTO.RegisterRequestDTO;
 import com.cloudstorage.model.dto.loginDTO.RegisterResponseDTO;
 import com.cloudstorage.model.entity.Users;
+import com.cloudstorage.model.enums.AppRole;
 import com.cloudstorage.model.repository.UserRepository;
 
 import lombok.AllArgsConstructor;

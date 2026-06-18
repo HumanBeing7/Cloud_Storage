@@ -2,7 +2,7 @@ package com.cloudstorage.model.dto.loginDTO;
 
 import java.time.LocalDateTime;
 
-import com.cloudstorage.model.config.AppRole;
+import com.cloudstorage.model.enums.AppRole;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;

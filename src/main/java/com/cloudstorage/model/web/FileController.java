@@ -6,6 +6,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -31,14 +32,16 @@ public class FileController {
     private final StorageService storageService;
 
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<?> uploadFile(@RequestParam("file") MultipartFile file) {
+    public ResponseEntity<?> uploadFile(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "folderId", required = false) String folderId) {
         try {
             // Check if the user forgot to attach a file
             if (file.isEmpty()) {
                 return ResponseEntity.badRequest().body("Please select a file to upload.");
             }
 
-            FileEntity savedFile = fileService.uploadLocalFile(file);
+            FileEntity savedFile = fileService.uploadLocalFile(file,folderId);
 
             // Return success with the new Database ID!
             return ResponseEntity.ok("File uploaded successfully! Database ID: " + savedFile.getId());
@@ -72,6 +75,35 @@ public class FileController {
         }
     }
 
+    // 1. Rename Endpoint
+    @PutMapping("/{id}/rename")
+    public ResponseEntity<?> renameFile(
+            @PathVariable String id, 
+            @RequestParam("newName") String newName) {
+        try {
+            if (newName == null || newName.trim().isEmpty()) {
+                return ResponseEntity.badRequest().body("New name cannot be empty.");
+            }
+            FileEntity updatedFile = fileService.renameFile(id, newName);
+            return ResponseEntity.ok("File renamed successfully to: " + updatedFile.getOriginalName());
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Rename failed: " + e.getMessage());
+        }
+    }
+
+    // 2. Move Endpoint
+    @PutMapping("/{id}/move")
+    public ResponseEntity<?> moveFile(
+            @PathVariable String id, 
+            @RequestParam(value = "folderId", required = false) String folderId) {
+        try {
+            fileService.moveFile(id, folderId);
+            return ResponseEntity.ok("File moved successfully.");
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Move failed: " + e.getMessage());
+        }
+    }
+
     // Add this to FileController.java
     @DeleteMapping("/{id}")
     public ResponseEntity<?> deleteFile(@PathVariable String id) {
@@ -80,6 +112,17 @@ public class FileController {
             return ResponseEntity.ok("File moved to trash successfully.");
         } catch (Exception e) {
             return ResponseEntity.badRequest().body("Failed to delete file: " + e.getMessage());
+        }
+    }
+
+    // Add this endpoint
+    @DeleteMapping("/trash/empty")
+    public ResponseEntity<?> emptyFileTrash() {
+        try {
+            fileService.emptyFileTrash();
+            return ResponseEntity.ok("Trash emptied successfully. All physical files and database records destroyed.");
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body("Failed to empty trash: " + e.getMessage());
         }
     }
     

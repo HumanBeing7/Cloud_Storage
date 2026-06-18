@@ -1,15 +1,19 @@
 package com.cloudstorage.model.service;
 
+import java.util.List;
 import java.util.UUID;
 
 import org.springframework.lang.NonNull;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.cloudstorage.model.entity.FileEntity;
+import com.cloudstorage.model.entity.Folder;
 import com.cloudstorage.model.entity.Users;
 import com.cloudstorage.model.repository.FileRepository;
+import com.cloudstorage.model.repository.FolderRepository;
 import com.cloudstorage.model.repository.UserRepository;
 
 import lombok.AllArgsConstructor;
@@ -17,10 +21,11 @@ import lombok.AllArgsConstructor;
 @AllArgsConstructor
 public class FileService {
     private final FileRepository fileRepository;
+    private final FolderRepository folderRepository;
     private final StorageService storageService;
     private final UserRepository userRepository;
 
-    public FileEntity uploadLocalFile(MultipartFile file){
+    public FileEntity uploadLocalFile(MultipartFile file, String folderId){
         //Identify who is holding the VIP Badge
         String userEmail = SecurityContextHolder.getContext().getAuthentication().getName();
         Users currentUser = userRepository.findByEmail(userEmail)
@@ -42,8 +47,52 @@ public class FileService {
         fileMetaData.setTrash(false);
         fileMetaData.setUser(currentUser);
         
-        //LEAVE FOLDER NULL -> FIRST FILE SITS AT ROOT 
-         return fileRepository.save(fileMetaData);
+        //Handle Folder Logic
+        if (folderId != null && !folderId.trim().trim().isEmpty()) {
+            //Find the Folder and security reach
+            Folder targetFolder = folderRepository.findById(folderId)
+                    .orElseThrow(() -> new RuntimeException("Target folder not found."));
+
+            // SECURITY GATE: Does the user own this folder?
+            if (!targetFolder.getUser().getEmail().equals(userEmail)) {
+                throw new RuntimeException("Security Breach: Cannot upload to someone else's folder.");
+            }
+            //set the file to folder
+            fileMetaData.setFolder(targetFolder);
+        }
+        return fileRepository.save(fileMetaData);
+    }
+
+    // 1. Rename a File
+    public FileEntity renameFile(String fileId, String newName) {
+        // Fetch securely (will throw error if they don't own it)
+        FileEntity file = getFileMetadataSecurely(fileId);
+
+        file.setOriginalName(newName);
+        return fileRepository.save(file);
+    }
+
+    // 2. Move a File to a different folder
+    public FileEntity moveFile(String fileId, String targetFolderId) {
+        FileEntity file = getFileMetadataSecurely(fileId);
+        String userEmail = SecurityContextHolder.getContext().getAuthentication().getName();
+
+        // If no target folder is provided, move it back to the "Home" root directory
+        if (targetFolderId == null || targetFolderId.trim().isEmpty()) {
+            file.setFolder(null);
+        } else {
+            // Find the new folder and check ownership
+            Folder targetFolder = folderRepository.findById(targetFolderId)
+                    .orElseThrow(() -> new RuntimeException("Target folder not found."));
+
+            if (!targetFolder.getUser().getEmail().equals(userEmail)) {
+                throw new RuntimeException("Security Breach: Cannot move file to a folder you don't own.");
+            }
+
+            file.setFolder(targetFolder);
+        }
+
+        return fileRepository.save(file);
     }
 
     // Checking the Request validity by Checking authority
@@ -62,6 +111,36 @@ public class FileService {
 
         return fileMetadata;
     }
+
+    @Transactional
+    public void emptyFileTrash(){
+        // 1. Identify the user
+        String userEmail = SecurityContextHolder.getContext().getAuthentication().getName();
+        Users currentUser = userRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        
+        // 2.Fetch all Ghost files into java Memory
+        List<FileEntity> trashedFiles = fileRepository.findAllTrashedFilesByUser(currentUser.getId());
+
+        //If its empty return
+        if (trashedFiles.isEmpty()) {
+            return;
+        } 
+
+        // 3.Physical Purge Phase -> hard deleting before record update
+        for(FileEntity file:trashedFiles){
+            try {
+                //Delete Physically From Local or Bucket
+                storageService.deleteFile(file.getStorageKey());
+            } catch (Exception e) {
+                System.err.println("Warning: Could Not Delete File Physically: " + file.getOriginalName());
+            }
+        } 
+
+        //4.Database Purge
+        fileRepository.permanentlyDeleteTrashedFilesByUser(currentUser.getId());
+    }
+
 
     public void moveToTrash(String fileId){
         FileEntity fileMetaData = getFileMetadataSecurely(fileId);

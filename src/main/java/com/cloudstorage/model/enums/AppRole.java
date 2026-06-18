@@ -1,4 +1,4 @@
-package com.cloudstorage.model.config;
+package com.cloudstorage.model.enums;
 
 public enum AppRole {
     ADMIN,
