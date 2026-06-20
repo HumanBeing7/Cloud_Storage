@@ -1,6 +1,7 @@
 package com.cloudstorage.model.service;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.lang.NonNull;
@@ -11,9 +12,11 @@ import org.springframework.web.multipart.MultipartFile;
 
 import com.cloudstorage.model.entity.FileEntity;
 import com.cloudstorage.model.entity.Folder;
+import com.cloudstorage.model.entity.ShareRecord;
 import com.cloudstorage.model.entity.Users;
 import com.cloudstorage.model.repository.FileRepository;
 import com.cloudstorage.model.repository.FolderRepository;
+import com.cloudstorage.model.repository.ShareRecordRepository;
 import com.cloudstorage.model.repository.UserRepository;
 
 import lombok.AllArgsConstructor;
@@ -22,6 +25,7 @@ import lombok.AllArgsConstructor;
 public class FileService {
     private final FileRepository fileRepository;
     private final FolderRepository folderRepository;
+    private final ShareRecordRepository shareRecordRepository;
     private final StorageService storageService;
     private final UserRepository userRepository;
 
@@ -97,16 +101,30 @@ public class FileService {
 
     // Checking the Request validity by Checking authority
     public FileEntity getFileMetadataSecurely(@NonNull String fileId) {
-        // 1. Who is asking?
+        // 1. Who is asking? Grab their email and find their Database ID
         String userEmail = SecurityContextHolder.getContext().getAuthentication().getName();
+        Users currentUser = userRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new RuntimeException("Authenticated user not found."));
 
         // 2. Does the file exist?
         FileEntity fileMetadata = fileRepository.findById(fileId)
                 .orElseThrow(() -> new RuntimeException("File not found in database."));
+        // 3. THE PRIMARY CHECK: Do they own it?
+        boolean isOwner = fileMetadata.getUser().getId().equals(currentUser.getId());
+        boolean hasAccess = isOwner;
 
-        // 3. THE SECURITY GATE: Do they own it? (Later we will add "Shared" logic here)
-        if (!fileMetadata.getUser().getEmail().equals(userEmail)) {
-            throw new RuntimeException("Security Breach: You do not have permission to access this file.");
+        // 4. THE FALLBACK CHECK: Was it shared with them?
+        if (!isOwner) {
+            Optional<ShareRecord> shareRecord = shareRecordRepository.findByFileIdAndSharedWithUserId(fileMetadata.getId(), currentUser.getId());
+            
+            if (shareRecord.isPresent()) {
+                hasAccess = true; // The Bouncer recognizes the VIP pass!
+            }
+        }
+
+        // 5. THE FINAL VERDICT
+        if (!hasAccess) {
+            throw new RuntimeException("Security Breach: You do not own this file and it has not been shared with you.");
         }
 
         return fileMetadata;

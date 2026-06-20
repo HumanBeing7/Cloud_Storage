@@ -30,6 +30,7 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/auth/**").permitAll() // VIP List: Open the lobby doors!
                 .requestMatchers("/api/auth/**", "/error").permitAll() //hahah it block even the delhivery error guy
+                .requestMatchers("/api/shares/shared/**").permitAll()
                 .anyRequest().authenticated()                // Lock down everything else
             )
             //aint jwt is already stateless

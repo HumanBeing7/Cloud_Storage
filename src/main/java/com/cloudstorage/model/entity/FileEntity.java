@@ -34,7 +34,7 @@ public class FileEntity {
     private String originalName;
 
     @Column(nullable = false,updatable = true)
-    private String storageKey;
+    private String storageKey;  //acutal path
 
     //how to fetch for entire files
     //Don't need BigInt -> long is enough
